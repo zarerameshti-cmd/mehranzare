@@ -1,6 +1,5 @@
-
 import React from 'react';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Navigation from './components/Navigation';
 import Home from './pages/Home';
 import Portfolio from './pages/Portfolio';
@@ -54,9 +53,9 @@ const AppRoutes = () => {
 const App: React.FC = () => {
   return (
     <StoreProvider>
-      <MemoryRouter>
+      <BrowserRouter>
         <AppRoutes />
-      </MemoryRouter>
+      </BrowserRouter>
     </StoreProvider>
   );
 };

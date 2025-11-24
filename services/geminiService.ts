@@ -1,7 +1,18 @@
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 
-// Initialize the Gemini client
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+// Initialize the Gemini client safely
+let ai: GoogleGenAI | null = null;
+const apiKey = process.env.API_KEY;
+
+if (apiKey) {
+  try {
+    ai = new GoogleGenAI({ apiKey });
+  } catch (error) {
+    console.warn("Failed to initialize Gemini client:", error);
+  }
+} else {
+  console.warn("Gemini API Key is missing. AI features will be disabled.");
+}
 
 const MODEL_NAME = 'gemini-2.5-flash';
 
@@ -9,6 +20,7 @@ const MODEL_NAME = 'gemini-2.5-flash';
  * Generates a creative description for an artwork based on its title and basic category.
  */
 export const generateArtworkDescription = async (title: string, category: string): Promise<string> => {
+  if (!ai) return "AI services unavailable (API Key missing).";
   try {
     const prompt = `I am a PhD philosopher of art and an artist. Write a sophisticated, deep, and artistic description (about 80 words) for my new piece titled "${title}" which is a "${category}". Use philosophical terminology and artistic critique language.`;
     
@@ -28,6 +40,7 @@ export const generateArtworkDescription = async (title: string, category: string
  * Provides strategic advice for the website based on a user query.
  */
 export const askStrategicAdvisor = async (query: string, context: string): Promise<string> => {
+  if (!ai) return "AI Strategy module offline (API Key missing).";
   try {
     const prompt = `
       You are the strategic advisor for a world-renowned Professor of Philosophy and Artist. 
@@ -60,6 +73,7 @@ export const generateMultilingualData = async (
   inputFa: string,
   extraContext: string = ''
 ): Promise<any> => {
+  if (!ai) throw new Error("AI services unavailable");
   try {
     const prompt = `
       You are the content engine for a multilingual high-end art website.
