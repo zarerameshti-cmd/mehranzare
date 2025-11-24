@@ -39,75 +39,52 @@ interface StoreContextType {
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
-// API URL - assuming the node server runs on port 3001
-const API_URL = 'http://localhost:3001/api';
+// Helper to load from LocalStorage or fallback to Mock Data
+const loadFromStorage = <T,>(key: string, fallback: T): T => {
+  try {
+    const stored = localStorage.getItem(key);
+    return stored ? JSON.parse(stored) : fallback;
+  } catch (e) {
+    console.warn(`Failed to load ${key} from storage`, e);
+    return fallback;
+  }
+};
 
 export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [artworks, setArtworks] = useState<Artwork[]>(MOCK_ARTWORKS);
-  const [books, setBooks] = useState<Book[]>(MOCK_BOOKS);
-  const [journal, setJournal] = useState<JournalPost[]>(MOCK_JOURNAL);
-  const [logs, setLogs] = useState<AdminLog[]>([
-    { id: '1', action: 'System Initialized', timestamp: new Date().toISOString() }
-  ]);
+  // Initialize state from LocalStorage to persist data across refreshes without a server
+  const [artworks, setArtworks] = useState<Artwork[]>(() => loadFromStorage('artworks', MOCK_ARTWORKS));
+  const [books, setBooks] = useState<Book[]>(() => loadFromStorage('books', MOCK_BOOKS));
+  const [journal, setJournal] = useState<JournalPost[]>(() => loadFromStorage('journal', MOCK_JOURNAL));
+  const [logs, setLogs] = useState<AdminLog[]>(() => loadFromStorage('admin_logs', [
+    { id: '1', action: 'System Initialized (Local Mode)', timestamp: new Date().toISOString() }
+  ]));
+  
   const [language, setLanguage] = useState<Language>('en');
-  const [cart, setCart] = useState<CartItem[]>([]);
+  const [cart, setCart] = useState<CartItem[]>(() => loadFromStorage('cart', []));
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>(() => loadFromStorage('chat_history', [
     {
       id: 'init',
       role: 'ai',
       content: 'سلام دکتر. من مشاور استراتژیک هوشمند شما هستم. می‌توانم با تحلیل داده‌های سایت، وضعیت بازار هنر و مباحث فلسفی، به شما در تدوین استراتژی‌های جدید کمک کنم. چه دستوری دارید؟',
       timestamp: new Date().toISOString()
     }
-  ]);
+  ]));
 
-  // --- Data Synchronization (DB Connection) ---
-  useEffect(() => {
-    const syncWithDatabase = async () => {
-      try {
-        const [artRes, bookRes, journalRes] = await Promise.all([
-          fetch(`${API_URL}/artworks`),
-          fetch(`${API_URL}/books`),
-          fetch(`${API_URL}/journal`)
-        ]);
-
-        if (artRes.ok) {
-          const data = await artRes.json();
-          if (Array.isArray(data) && data.length > 0) {
-            setArtworks(data);
-          }
-        }
-        
-        if (bookRes.ok) {
-          const data = await bookRes.json();
-          if (Array.isArray(data) && data.length > 0) {
-            setBooks(data);
-          }
-        }
-
-        if (journalRes.ok) {
-          const data = await journalRes.json();
-          if (Array.isArray(data) && data.length > 0) {
-            setJournal(data);
-          }
-        }
-
-        addLog('Connected to Arvand Database successfully');
-      } catch (error) {
-        console.warn('Backend server not reachable. Using local mock data.', error);
-        addLog('Running in Offline/Mock Mode');
-      }
-    };
-
-    syncWithDatabase();
-  }, []);
+  // --- Persistence Effects ---
+  // Whenever state changes, save it to LocalStorage automatically
+  useEffect(() => { localStorage.setItem('artworks', JSON.stringify(artworks)); }, [artworks]);
+  useEffect(() => { localStorage.setItem('books', JSON.stringify(books)); }, [books]);
+  useEffect(() => { localStorage.setItem('journal', JSON.stringify(journal)); }, [journal]);
+  useEffect(() => { localStorage.setItem('admin_logs', JSON.stringify(logs)); }, [logs]);
+  useEffect(() => { localStorage.setItem('cart', JSON.stringify(cart)); }, [cart]);
+  useEffect(() => { localStorage.setItem('chat_history', JSON.stringify(chatHistory)); }, [chatHistory]);
 
   // --- Notification Logic ---
   const notify = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     const id = Math.random().toString(36).substr(2, 9);
     setNotifications(prev => [...prev, { id, message, type }]);
-    // Auto remove after 5 seconds
     setTimeout(() => removeNotification(id), 5000);
   };
 
@@ -117,91 +94,38 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   // --- Artwork Logic ---
   const addArtwork = (art: Artwork) => {
-    // Optimistic UI update
     setArtworks(prev => [art, ...prev]);
     addLog(`Added new artwork: ${art.title}`);
-    
-    // Sync with DB
-    fetch(`${API_URL}/artworks`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(art)
-    })
-    .then(res => res.json())
-    .then(savedArt => {
-       // Update with real ID from DB if necessary
-       setArtworks(prev => prev.map(a => a.id === art.id ? savedArt : a));
-    })
-    .catch(err => {
-      console.warn('DB Sync Failed', err);
-      notify('خطا در ذخیره در دیتابیس', 'error');
-    });
   };
 
   const removeArtwork = (id: string) => {
     const art = artworks.find(a => a.id === id);
     setArtworks(artworks.filter(a => a.id !== id));
     if (art) addLog(`Removed artwork: ${art.title}`);
-
-    // Sync
-    fetch(`${API_URL}/artworks/${id}`, { method: 'DELETE' })
-      .catch(err => console.warn('DB Sync Failed', err));
   };
 
   // --- Book Logic ---
   const addBook = (book: Book) => {
     setBooks(prev => [book, ...prev]);
     addLog(`Added new book: ${book.title}`);
-
-    // Sync
-    fetch(`${API_URL}/books`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(book)
-    })
-    .then(res => res.json())
-    .then(savedBook => {
-       setBooks(prev => prev.map(b => b.id === book.id ? savedBook : b));
-    })
-    .catch(err => console.warn('DB Sync Failed', err));
   }
 
   const removeBook = (id: string) => {
     const item = books.find(b => b.id === id);
     setBooks(books.filter(b => b.id !== id));
     if (item) addLog(`Removed book: ${item.title}`);
-
-    // Sync
-    fetch(`${API_URL}/books/${id}`, { method: 'DELETE' })
-      .catch(err => console.warn('DB Sync Failed', err));
   }
 
   // --- Journal Logic ---
   const addJournal = (post: JournalPost) => {
     setJournal(prev => [post, ...prev]);
     addLog(`Published journal post: ${post.title}`);
-
-    // Sync
-    fetch(`${API_URL}/journal`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(post)
-    })
-    .then(res => res.json())
-    .then(savedPost => {
-       setJournal(prev => prev.map(p => p.id === post.id ? savedPost : p));
-    })
-    .catch(err => console.warn('DB Sync Failed', err));
   }
 
   const removeJournal = (id: string) => {
     const item = journal.find(j => j.id === id);
     setJournal(journal.filter(j => j.id !== id));
     if (item) addLog(`Removed journal post: ${item.title}`);
-
-    // Sync
-    fetch(`${API_URL}/journal/${id}`, { method: 'DELETE' })
-      .catch(err => console.warn('DB Sync Failed', err));
   }
 
   // --- System Logic ---
